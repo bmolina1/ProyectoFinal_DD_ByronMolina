@@ -1,10 +1,14 @@
 import { Router } from 'express';
-import { getAllDirectors, findDirectorById } from '../controllers/director.controller.js';
+import { getAllDirectors, findDirectorById, createDirector, updateDirector, deleteDirector } from '../controllers/director.controller.js';
 
-const DirectorRouter = Router();
+const DirectorsRouter = Router();
 
-DirectorRouter.get('/', getAllDirectors);
-DirectorRouter.get('/:id', findDirectorById);
+DirectorsRouter.get('/', getAllDirectors);
+DirectorsRouter.get('/:id', findDirectorById);
+DirectorsRouter.post('/', createDirector);
+DirectorsRouter.put('/:id', updateDirector);
+DirectorsRouter.delete('/:id', deleteDirector);
 
 
-export default DirectorRouter;
+
+export default DirectorsRouter;
