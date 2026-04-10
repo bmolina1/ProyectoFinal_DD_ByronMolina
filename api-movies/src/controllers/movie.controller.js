@@ -1,6 +1,7 @@
 import Movie from '../service/movie.js'
-import { validateMovieSchema, validatePartialMovieSchema } from '../schemas/movie.schema.js'
-
+import { validateMovieSchema, validatePartialMovieSchema } from '../schemas/movie.schema.js'    
+import { formatMovies } from '../Utils/formatMovies.js'
+import { tr } from 'zod/v4/locales'
 
 export const getAll = async (req, res) => {
 
@@ -27,31 +28,18 @@ export const getAll = async (req, res) => {
         }
 
 
-        const newList = filtered_movies.map((movie) => {
-
-            return {
-                ...movie,
-                genres: movie.genres.split(', '),
-                directors: movie.directors.split(', ')
-            }
-
-        })     // [{}]
-
-        // filtered_movies.forEach((movie) => {
-        //     movie.genres = movie.genres.split(', ')
-        //     movie.directors = movie.directors.split(', ')
-        // })
+        const newList = formatMovies(filtered_movies)
 
         res.json({
             message: 'Obtener todas las peliculas',
             data: newList
         })//server
-
-    } catch (e) {
-        return res.status(500).json({
-            message: 'Error al consultar la base de datos: ' + e.message,
-            data: null
-        })
+        } catch (e) {
+            return res.status(500)
+            .json({
+                message: 'Error al consultar la base de datos: ' + e.message,
+                data: null
+            })
     }
 
 }
@@ -60,24 +48,13 @@ export const getById = async (req, res) => {
 
     const { id } = req.params
 
-    // if (isNaN(id) || id < 0) {
-    //     return res.status(400).json({
-    //         message: 'el parametro debe ser un numero'
-    //     })
-    // }
-
-    //consultar la bbdd
-    // const movie = MOVIES.find((movie) => {
-    //     return movie.id === id
-    // })
-
     //desde el servicio
     try {
         const [movie] = await Movie.find(id)
 
         if (!movie) {
             res.status(404).json({
-                message: 'pelicula no encontrada',
+                message: 'Pelicula no encontrada',
                 data: null
             })
         }
@@ -96,6 +73,7 @@ export const getById = async (req, res) => {
 
 export const create = async (req, res) => {
 
+    try {
     //obtener los datos
     const body = req.body // server
 
@@ -103,7 +81,7 @@ export const create = async (req, res) => {
     const { success, data, error, errors } = validateMovieSchema(body)
 
     if (!success) {
-        res.status(400).json({
+        return res.status(400).json({
             status: 'error',
             message: 'verifique la información enviada',
             errors: errors?.error?.issues || JSON.parse(error.message)
@@ -117,16 +95,26 @@ export const create = async (req, res) => {
 
 
     // responder al cliente -> server
-    res
-        .status(201)
+    res.status(201)
         .json({
             status: 'success',
             message: 'Pelicula creada correctamente',
             data: newMovie
         })
+
+    }
+    
+    catch (e) {
+        return res.status(500)
+            .json({
+                status: 'error',
+                message: 'Error al consultar la base de datos: ' + e.message,
+                data: null
+            })
+    }
 }
 
-export const update = async (req, res) => {
+    export const update = async (req, res) => {
 
     const { id } = req.params
 

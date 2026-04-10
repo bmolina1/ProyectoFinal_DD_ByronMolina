@@ -61,88 +61,103 @@ export default class Movie {
     }
 
     static create = async (movie) => {
-        const { title, release_year, synopsis, posterUrl, genre, director } = movie;
+        
+        const { title, release_year, synopsis, posterUrl = null, genres = [], directors = []} = movie
 
-        // 1. Insertamos la película básica en la tabla 'movies'
-        // Usamos AUTO_INCREMENT de la BD, así que no necesitamos generar un ID manual
         const [result] = await pool.query(
-            'INSERT INTO movies (title, release_year, synopsis, poster_url) VALUES (?, ?, ?, ?)',
+            `INSERT INTO movies (title, release_year, synopsis, poster_url)
+             VALUES (?, ?, ?, ?)`,
             [title, release_year, synopsis, posterUrl]
-        );
+        )
 
-        const movie_id = result.insertId; // El ID que MySQL le asignó (ej. 4, 5, 6...)
+        const movieId = result.insertId
 
-        // 2. Insertar los Géneros en la tabla pivote 'movie_genres'
-        // 'genre' debe ser un array de IDs numéricos, ej: [1, 3]
-        if (genre && genre.length > 0) {
-            const genreValues = genre.map(gId => [movie_id, gId]);
+        if (genres.length > 0) {
+            const genreValues = genres.map((genreId) => [movieId, genreId])
+
             await pool.query(
-                'INSERT INTO movie_genres (movie_id, genre_id) VALUES ?', 
+                `INSERT INTO movie_genres (movie_id, genre_id)
+                 VALUES ?`,
                 [genreValues]
-            );
+            )
         }
 
-        // 3. Insertar los Directores en la tabla pivote 'movie_directors'
-        // 'director' debe ser un array de IDs numéricos, ej: [2]
-        if (director && director.length > 0) {
-            const directorValues = director.map(dId => [movie_id, dId]);
+        if (directors.length > 0) {
+            const directorValues = directors.map((directorId) => [movieId, directorId])
+
             await pool.query(
-                'INSERT INTO movie_directors (movie_id, director_id) VALUES ?', 
+                `INSERT INTO movie_directors (movie_id, director_id)
+                 VALUES ?`,
                 [directorValues]
-            );
+            )
         }
 
-        // Retornamos el objeto completo con su nuevo ID real
-        return { id: movie_id, ...movie };
+        return {
+            id: movieId,
+            ...movie
+        }
     }
 
-    static update = async (id, movieData) => {
-        const { title, release_year, synopsis, posterUrl, genre, director } = movieData;
+    static update = async (id, movie) => {
+        const { title, release_year, synopsis, poster_url, genres, directors } = movie
 
-        // 1. Actualizamos los datos básicos en la tabla 'movies'
-        // Usamos IFNULL para que si un campo no viene en el JSON, mantenga el valor que ya tenía la DB
-        await pool.query(`
-            UPDATE movies 
-            SET title = IFNULL(?, title), 
-                release_year = IFNULL(?, release_year), 
-                synopsis = IFNULL(?, synopsis), 
-                poster_url = IFNULL(?, poster_url)
-            WHERE id = ?`, 
-            [title, release_year, synopsis, posterUrl, id]
-        );
+        await pool.query('START TRANSACTION')
 
-        // 2. Si el usuario envió nuevos géneros, actualizamos la tabla pivote
-        if (genre) {
-            // Borramos las relaciones viejas
-            await pool.query('DELETE FROM movie_genres WHERE movie_id = ?', [id]);
-            // Insertamos las nuevas
-            if (genre.length > 0) {
-                const values = genre.map(gId => [id, gId]);
-                await pool.query('INSERT INTO movie_genres (movie_id, genre_id) VALUES ?', [values]);
+        const updateFields = []
+        const updateValues = []
+
+        if (title !== undefined) {
+            updateFields.push('title = ?')
+            updateValues.push(title)
+        }
+        if (release_year !== undefined) {
+            updateFields.push('release_year = ?')
+            updateValues.push(release_year)
+        }
+        if (synopsis !== undefined) {
+            updateFields.push('synopsis = ?')
+            updateValues.push(synopsis)
+        }
+        if (poster_url !== undefined) {
+            updateFields.push('poster_url = ?')
+            updateValues.push(poster_url)
+        }
+
+        if (updateFields.length > 0) {
+            updateValues.push(id)
+            await pool.query(
+                `UPDATE movies SET ${updateFields.join(', ')} WHERE id = ?`,
+                updateValues
+            )
+        }
+
+        if (genres !== undefined && Array.isArray(genres)) {
+            await pool.query('DELETE FROM movie_genres WHERE movie_id = ?', [id])
+            if (genres.length > 0) {
+                const genreValues = genres.map(g => [id, g])
+                await pool.query('INSERT INTO movie_genres (movie_id, genre_id) VALUES ?', [genreValues])
             }
         }
 
-        // 3. Si el usuario envió nuevos directores, actualizamos la tabla pivote
-        if (director) {
-            // Borramos las relaciones viejas
-            await pool.query('DELETE FROM movie_directors WHERE movie_id = ?', [id]);
-            // Insertamos las nuevas
-            if (director.length > 0) {
-                const values = director.map(dId => [id, dId]);
-                await pool.query('INSERT INTO movie_directors (movie_id, director_id) VALUES ?', [values]);
+        if (directors !== undefined && Array.isArray(directors)) {
+            await pool.query('DELETE FROM movie_directors WHERE movie_id = ?', [id])
+            if (directors.length > 0) {
+                const directorValues = directors.map(d => [id, d])
+                await pool.query('INSERT INTO movie_directors (movie_id, director_id) VALUES ?', [directorValues])
             }
         }
 
-        // Retornamos el resultado de la consulta para confirmar los cambios
-        return await this.find(id);
+        await pool.query('COMMIT')
+
+        return await Movie.find(id)
     }
 
     static delete = async (id) => {
-        // Al ejecutar este DELETE, gracias al 'ON DELETE CASCADE' de tu SQL,
-        // MySQL borrará automáticamente las filas relacionadas en movie_genres y movie_directors.
-        const [result] = await pool.query('DELETE FROM movies WHERE id = ?', [id]);
-        
-        // Retornamos true si se eliminó algo, false si el ID no existía
-        return result.affectedRows > 0;
+
+    await pool.query('DELETE FROM movie_genres WHERE movie_id = ?', [id])
+    await pool.query('DELETE FROM movie_directors WHERE movie_id = ?', [id])
+    await pool.query('DELETE FROM movies WHERE id = ?', [id])
+
     }
+
 }
